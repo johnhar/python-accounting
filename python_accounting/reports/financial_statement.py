@@ -113,7 +113,7 @@ class FinancialStatement:
         for account_type, balance in self.balances[section.name].items():
             label = f"\n{self.indent}{account_type}"
             content += f"{label}{balance * factor:>{self.width - len(label) + 1}}"
-            return content
+        return content
 
     def _print_result(self, result, grandtotal=False) -> str:
         return f"""{f"{self.subtotal:>{self.width}}"}\n{result}{f"{self.result_amounts[result.name]:>{self.width - len(result)}}"}\n{f"{self.grandtotal:>{self.width}}" if grandtotal else ""}"""
