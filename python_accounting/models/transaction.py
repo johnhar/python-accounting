@@ -34,6 +34,7 @@ from python_accounting.exceptions import (
     MissingLineItemError,
     PostedTransactionError,
     InvalidTransactionTypeError,
+    MixedFundError,
 )
 from python_accounting.models import Recyclable, Account, ReportingPeriod, LineItem
 
@@ -87,12 +88,16 @@ class Transaction(IsolatingMixin, Recyclable):
     """(int): The id of the Currency associated with the Transaction."""
     account_id: Mapped[int] = mapped_column(ForeignKey("account.id"))
     """(int): The id of the Account model to which Transaction amounts are to be posted."""
+    fund_id: Mapped[int] = mapped_column(ForeignKey("fund.id"), nullable=True)
+    """(`int`, optional): The id of the Fund associated with the Transaction (source fund for FundTransfer)."""
 
     # relationships
     currency: Mapped["Currency"] = relationship(foreign_keys=[currency_id])
     """(Currency): The Currency associated with the Transaction."""
     account: Mapped["Account"] = relationship(foreign_keys=[account_id])
     """(Account): The Account model to which Transaction amounts are to be posted."""
+    fund: Mapped["Fund"] = relationship(foreign_keys=[fund_id])
+    """(`Fund`, optional): The Fund associated with the Transaction."""
     line_items: Mapped[Set["LineItem"]] = relationship(
         back_populates="transaction",
         primaryjoin="Transaction.id==LineItem.transaction_id",
@@ -342,6 +347,15 @@ class Transaction(IsolatingMixin, Recyclable):
         for line_item in self.line_items:
             if line_item.account_id == self.account_id:
                 raise RedundantTransactionError(line_item)
+
+        if (
+            session.entity.fund_accounting
+            and self.transaction_type != Transaction.TransactionType.FUND_TRANSFER
+            and self.line_items
+        ):
+            fund_ids = {li.fund_id for li in self.line_items}
+            if len(fund_ids) > 1:
+                raise MixedFundError
 
     def validate_delete(self, _) -> None:
         """

@@ -63,6 +63,18 @@ class Ledger(  # pylint: disable=too-many-instance-attributes
         ForeignKey("tax.id", ondelete="RESTRICT"), nullable=True
     )
     """(`int`, optional): The id of the Tax associated with the Ledger."""
+    fund_id: Mapped[int] = mapped_column(
+        ForeignKey("fund.id", ondelete="RESTRICT"), nullable=True
+    )
+    """(`int`, optional): The id of the Fund associated with the Ledger."""
+    team_id: Mapped[int] = mapped_column(
+        ForeignKey("team.id", ondelete="RESTRICT"), nullable=True
+    )
+    """(`int`, optional): The id of the Team associated with the Ledger."""
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("project.id", ondelete="RESTRICT"), nullable=True
+    )
+    """(`int`, optional): The id of the Project associated with the Ledger."""
 
     # relationships
     transaction: Mapped["Transaction"] = relationship(foreign_keys=[transaction_id])
@@ -75,6 +87,12 @@ class Ledger(  # pylint: disable=too-many-instance-attributes
     """(Account): The oppeite double entry Account associated with the Ledger."""
     line_item: Mapped["LineItem"] = relationship(foreign_keys=[line_item_id])
     """(LineItem): The LineItem associated with the Ledger."""
+    fund: Mapped["Fund"] = relationship(foreign_keys=[fund_id])
+    """(`Fund`, optional): The Fund associated with the Ledger."""
+    team: Mapped["Team"] = relationship(foreign_keys=[team_id])
+    """(`Team`, optional): The Team associated with the Ledger."""
+    project: Mapped["Project"] = relationship(foreign_keys=[project_id])
+    """(`Project`, optional): The Project associated with the Ledger."""
 
     def __repr__(self) -> str:
         return f"""Post {self.post_account.name},
@@ -91,7 +109,12 @@ class Ledger(  # pylint: disable=too-many-instance-attributes
             return Ledger._make_compound_ledgers(
                 session, posts, folios, transaction, entry_type
             )
-        folio, folio_amount = folios[0]
+        folio_entry = folios[0]
+        folio, folio_amount = folio_entry[0], folio_entry[1]
+        # Extract dimensional tags if present
+        fund_id = folio_entry[2] if len(folio_entry) > 2 else None
+        team_id = folio_entry[3] if len(folio_entry) > 3 else None
+        project_id = folio_entry[4] if len(folio_entry) > 4 else None
         ledger = Ledger(
             transaction_id=transaction.id,
             currency_id=transaction.currency_id,
@@ -100,6 +123,9 @@ class Ledger(  # pylint: disable=too-many-instance-attributes
             entry_type=entry_type,
             post_account_id=post,
             folio_account_id=folio,
+            fund_id=fund_id,
+            team_id=team_id,
+            project_id=project_id,
         )
 
         if folio_amount > amount:
@@ -128,7 +154,7 @@ class Ledger(  # pylint: disable=too-many-instance-attributes
     ) -> None:
         if posts == []:
             return None
-        post, post_amount = posts[0]
+        post, post_amount = posts[0][0], posts[0][1]
         return Ledger._allocate_amount(
             session, post, post_amount, posts, folios, transaction, entry_type
         )
@@ -174,6 +200,9 @@ class Ledger(  # pylint: disable=too-many-instance-attributes
 
     @staticmethod
     def _post_simple(session, transaction: Transaction) -> None:
+        is_fund_transfer = (
+            transaction.transaction_type == Transaction.TransactionType.FUND_TRANSFER
+        )
         for line_item in transaction.line_items:
             amount = line_item.amount * line_item.quantity
             post, folio = Ledger._transaction_ledgers(transaction)
@@ -183,6 +212,16 @@ class Ledger(  # pylint: disable=too-many-instance-attributes
                 transaction.transaction_date
             )
             post.line_item_id = folio.line_item_id = line_item.id
+
+            # Propagate dimensional tags from line_item
+            post.team_id = folio.team_id = line_item.team_id
+            post.project_id = folio.project_id = line_item.project_id
+            if is_fund_transfer:
+                # For fund transfers: post gets source fund, folio gets destination fund
+                post.fund_id = transaction.fund_id
+                folio.fund_id = line_item.fund_id
+            else:
+                post.fund_id = folio.fund_id = line_item.fund_id
 
             if line_item.tax_id:
                 tax_post, tax_folio = deepcopy(post), deepcopy(folio)
@@ -247,25 +286,24 @@ class Ledger(  # pylint: disable=too-many-instance-attributes
             select(Ledger).where(Ledger.id == self.id - 1)
         ).fetchone()
 
+        fields = [
+            self.transaction_date.replace(microsecond=0),
+            self.entry_type,
+            round(Decimal(self.amount), 4).normalize(),
+            last.hash if last else config.hashing["salt"],
+            self.entity_id,
+            self.transaction_id,
+            self.currency_id,
+            self.post_account_id,
+            self.folio_account_id,
+            self.line_item_id,
+            self.tax_id,
+        ]
+
+        # Versioned hashing: include dimensional tags only if any are set
+        if self.fund_id is not None or self.team_id is not None or self.project_id is not None:
+            fields.extend([self.fund_id, self.team_id, self.project_id])
+
         return getattr(hashlib, config.hashing["algorithm"])(
-            ",".join(
-                list(
-                    map(
-                        str,
-                        [
-                            self.transaction_date.replace(microsecond=0),
-                            self.entry_type,
-                            round(Decimal(self.amount), 4).normalize(),
-                            last.hash if last else config.hashing["salt"],
-                            self.entity_id,
-                            self.transaction_id,
-                            self.currency_id,
-                            self.post_account_id,
-                            self.folio_account_id,
-                            self.line_item_id,
-                            self.tax_id,
-                        ],
-                    )
-                )
-            ).encode()
+            ",".join(list(map(str, fields))).encode()
         ).hexdigest()

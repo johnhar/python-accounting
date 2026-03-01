@@ -20,8 +20,8 @@ tox
 
 ## Architecture
 
-- `python_accounting/models/` — Core models (Account, Transaction, Ledger, LineItem, Entity, etc.)
-- `python_accounting/transactions/` — 10 transaction types (CashSale, ClientInvoice, SupplierBill, JournalEntry, etc.)
+- `python_accounting/models/` — Core models (Account, Transaction, Ledger, LineItem, Entity, Fund, Team, Project, etc.)
+- `python_accounting/transactions/` — 11 transaction types (CashSale, ClientInvoice, SupplierBill, JournalEntry, FundTransfer, etc.)
 - `python_accounting/reports/` — Financial statements (IncomeStatement, BalanceSheet, CashflowStatement, TrialBalance, AgingSchedule)
 - `python_accounting/mixins/` — Reusable behaviors (IsolatingMixin, ClearingMixin, AssigningMixin, BuyingMixin, SellingMixin)
 - `python_accounting/database/` — Session management, event listeners, hashing
@@ -36,6 +36,7 @@ tox
 - **Soft deletes**: Models inherit `Recyclable`; deletion sets `deleted_at` rather than removing rows.
 - **Validation hooks**: `validate()` runs on `session.add()`/`session.commit()`; `validate_delete()` on delete.
 - **Hash integrity**: Ledger entries are SHA-256 hash-chained (configured in `config.toml`).
+- **Fund accounting**: Entities can enable `fund_accounting=True` (immutable after creation) to require fund tags on all line items. Fund, Team, and Project are optional dimensional tags on LineItem/Ledger for analytical reporting. FundTransfer moves resources between funds.
 - **Test DB**: Tests use in-memory SQLite (`sqlite://`). Fixtures: `engine`, `session`, `entity`, `currency` in `conftest.py`.
 
 ## Detailed Analysis

@@ -47,13 +47,16 @@ class BalanceSheet(FinancialStatement):
     config = "balance_sheet"
     """(str): The configuration section for the report."""
 
-    def __init__(self, session, end_date: datetime = None) -> None:
+    def __init__(
+        self, session, end_date: datetime = None,
+        fund_id=None, team_id=None, project_id=None,
+    ) -> None:
         from python_accounting.reports.income_statement import (  # pylint: disable=import-outside-toplevel
             IncomeStatement,
         )
 
         self.start_date, self.end_date, _, _ = get_dates(session, None, end_date)
-        super().__init__(session)
+        super().__init__(session, fund_id=fund_id, team_id=team_id, project_id=project_id)
 
         self._get_sections(None, self.end_date)
 
@@ -64,7 +67,10 @@ class BalanceSheet(FinancialStatement):
         )
 
         # Net Profit
-        net_profit = IncomeStatement.net_profit(session, self.start_date, self.end_date)
+        net_profit = IncomeStatement.net_profit(
+            session, self.start_date, self.end_date,
+            fund_id=fund_id, team_id=team_id, project_id=project_id,
+        )
         self.balances["credit"] += net_profit * -1
 
         # Total Equity

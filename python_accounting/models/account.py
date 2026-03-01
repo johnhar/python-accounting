@@ -87,8 +87,9 @@ class Account(IsolatingMixin, Recyclable):
     def __repr__(self) -> str:
         return f"{self.account_type} {self.name} <{self.account_code}>"
 
-    def balance_movement(
-        self, session, start_date: datetime, end_date: datetime
+    def balance_movement(  # pylint: disable=too-many-arguments
+        self, session, start_date: datetime, end_date: datetime,
+        fund_id=None, team_id=None, project_id=None,
     ) -> Decimal:
         """
         Get the change in the account balance between the given dates.
@@ -99,6 +100,9 @@ class Account(IsolatingMixin, Recyclable):
                 included in the balance.
             end_date (datetime): The latest transaction date for Transaction amounts to be included
                 in the balance.
+            fund_id (int, optional): Filter by Fund.
+            team_id (int, optional): Filter by Team.
+            project_id (int, optional): Filter by Project.
 
         Returns:
             Decimal: The difference between the balance of the Account at the start date and
@@ -121,6 +125,12 @@ class Account(IsolatingMixin, Recyclable):
             .filter(Ledger.post_account_id == self.id)
             .filter(Ledger.entity_id == self.entity_id)
         )
+        if fund_id is not None:
+            query = query.filter(Ledger.fund_id == fund_id)
+        if team_id is not None:
+            query = query.filter(Ledger.team_id == team_id)
+        if project_id is not None:
+            query = query.filter(Ledger.project_id == project_id)
         return (
             query.filter(Ledger.entry_type == Balance.BalanceType.DEBIT).scalar() or 0
         ) - (
@@ -128,12 +138,15 @@ class Account(IsolatingMixin, Recyclable):
         )
 
     @staticmethod
-    def section_balances(
+    def section_balances(  # pylint: disable=too-many-arguments
         session,
         account_types: list,
         start_date: datetime = None,
         end_date: datetime = None,
         full_balance: bool = True,
+        fund_id=None,
+        team_id=None,
+        project_id=None,
     ) -> dict:
         """
         Gets the opening, movement and closing balances of the accounts of the given section
@@ -148,6 +161,9 @@ class Account(IsolatingMixin, Recyclable):
             end_date (datetime): The latest transaction date for Transaction amounts to be included
                 in the balance.
             full_balance (bool): Whether to include opening balance amounts in the balance.
+            fund_id (int, optional): Filter by Fund.
+            team_id (int, optional): Filter by Team.
+            project_id (int, optional): Filter by Project.
 
         Returns:
             dict: A summary of the total opening, balance movement and closing balance, which
@@ -157,6 +173,7 @@ class Account(IsolatingMixin, Recyclable):
                 - closing (Decimal): The sum of opening closing of Accounts in the section.
                 - categories (dict): The Accounts belonging to the section separated by Category.
         """
+        dim_kwargs = {"fund_id": fund_id, "team_id": team_id, "project_id": project_id}
         balances = {"opening": 0, "movement": 0, "closing": 0, "categories": {}}
         start_date, end_date, period_start, _ = get_dates(session, start_date, end_date)
 
@@ -164,9 +181,9 @@ class Account(IsolatingMixin, Recyclable):
             select(Account).filter(Account.account_type.in_(account_types))
         ).all():
             account.opening = account.opening_balance(
-                session, end_date.year
-            ) + account.balance_movement(session, period_start, start_date)
-            movement = account.balance_movement(session, start_date, end_date)
+                session, end_date.year, **dim_kwargs
+            ) + account.balance_movement(session, period_start, start_date, **dim_kwargs)
+            movement = account.balance_movement(session, start_date, end_date, **dim_kwargs)
             account.closing = account.opening + movement if full_balance else movement
             account.movement = movement * -1  # cashflow statement display
             if account.closing != 0 or account.movement != 0:
@@ -198,13 +215,19 @@ class Account(IsolatingMixin, Recyclable):
                 balances["closing"] += account.closing
         return balances
 
-    def opening_balance(self, session, year: int = None) -> Decimal:
+    def opening_balance(  # pylint: disable=too-many-arguments
+        self, session, year: int = None,
+        fund_id=None, team_id=None, project_id=None,
+    ) -> Decimal:
         """
         Gets the the opening balance for the account for the given year.
 
         Args:
             session (Session): The accounting session to which the Account belongs.
             year (int): The calendar year for which to retrieve the opening balance.
+            fund_id (int, optional): Filter by Fund.
+            team_id (int, optional): Filter by Team.
+            project_id (int, optional): Filter by Project.
 
         Returns:
             Decimal: The total opening balance of the Account for the year.
@@ -230,6 +253,12 @@ class Account(IsolatingMixin, Recyclable):
             .filter(Balance.account_id == self.id)
             .filter(Balance.entity_id == self.entity_id)
         )
+        if fund_id is not None:
+            query = query.filter(Balance.fund_id == fund_id)
+        if team_id is not None:
+            query = query.filter(Balance.team_id == team_id)
+        if project_id is not None:
+            query = query.filter(Balance.project_id == project_id)
         return (
             query.filter(Balance.balance_type == Balance.BalanceType.DEBIT).scalar()
             or 0
@@ -238,7 +267,10 @@ class Account(IsolatingMixin, Recyclable):
             or 0
         )
 
-    def closing_balance(self, session, end_date: datetime = None) -> Decimal:
+    def closing_balance(
+        self, session, end_date: datetime = None,
+        fund_id=None, team_id=None, project_id=None,
+    ) -> Decimal:
         """
         Gets the the closing balance of the Account as at the given date.
 
@@ -246,24 +278,30 @@ class Account(IsolatingMixin, Recyclable):
             session (Session): The accounting session to which the Account belongs.
             end_date (datetime): The latest transaction date for Transaction
                 amounts to be included in the balance.
+            fund_id (int, optional): Filter by Fund.
+            team_id (int, optional): Filter by Team.
+            project_id (int, optional): Filter by Project.
 
         Returns:
             Decimal: The total opening balance of the Account for the year.
 
         """
-
+        dim_kwargs = {"fund_id": fund_id, "team_id": team_id, "project_id": project_id}
         start_date, end_date, _, _ = get_dates(session, None, end_date)
 
-        return self.opening_balance(session, end_date.year) + self.balance_movement(
-            session, start_date, end_date
-        )
+        return self.opening_balance(
+            session, end_date.year, **dim_kwargs
+        ) + self.balance_movement(session, start_date, end_date, **dim_kwargs)
 
-    def statement(  # pylint: disable=too-many-locals
+    def statement(  # pylint: disable=too-many-locals,too-many-arguments
         self,
         session,
         start_date: datetime = None,
         end_date: datetime = None,
         schedule: bool = False,
+        fund_id=None,
+        team_id=None,
+        project_id=None,
     ) -> dict:
         # pylint: disable=line-too-long
         """
@@ -312,6 +350,7 @@ class Account(IsolatingMixin, Recyclable):
             raise InvalidAccountTypeError(
                 "Only Receivable and Payable Accounts can have a statement/schedule."
             )
+        dim_kwargs = {"fund_id": fund_id, "team_id": team_id, "project_id": project_id}
         start_date, end_date, _, period_id = get_dates(session, start_date, end_date)
 
         statement = (
@@ -323,7 +362,9 @@ class Account(IsolatingMixin, Recyclable):
             }
             if schedule
             else {
-                "opening_balance": self.opening_balance(session, end_date.year),
+                "opening_balance": self.opening_balance(
+                    session, end_date.year, **dim_kwargs
+                ),
                 "transactions": [],
                 "closing_balance": 0,
             }
@@ -349,6 +390,12 @@ class Account(IsolatingMixin, Recyclable):
                 .filter(Transaction.entity_id == self.entity_id)
                 .filter(Ledger.entity_id == self.entity_id)
             )
+            if fund_id is not None:
+                transactions = transactions.filter(ledger.fund_id == fund_id)
+            if team_id is not None:
+                transactions = transactions.filter(ledger.team_id == team_id)
+            if project_id is not None:
+                transactions = transactions.filter(ledger.project_id == project_id)
             if schedule:
                 transactions = transactions.filter(
                     Transaction.transaction_type.in_(Assignment.clearables)
@@ -359,8 +406,14 @@ class Account(IsolatingMixin, Recyclable):
                     .filter(Balance.account_id == self.id)
                     .filter(Balance.reporting_period_id == period_id)
                     .filter(Balance.entity_id == self.entity_id)
-                    .order_by(Balance.transaction_date)
                 )
+                if fund_id is not None:
+                    balances = balances.filter(Balance.fund_id == fund_id)
+                if team_id is not None:
+                    balances = balances.filter(Balance.team_id == team_id)
+                if project_id is not None:
+                    balances = balances.filter(Balance.project_id == project_id)
+                balances = balances.order_by(Balance.transaction_date)
             else:
                 transactions = transactions.filter(
                     Transaction.transaction_date >= start_date

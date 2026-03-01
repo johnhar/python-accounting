@@ -29,10 +29,11 @@ class CashflowStatement(FinancialStatement):
 
     # pylint: enable=line-too-long
     def __init__(
-        self, session, start_date: datetime = None, end_date: datetime = None
+        self, session, start_date: datetime = None, end_date: datetime = None,
+        fund_id=None, team_id=None, project_id=None,
     ) -> None:
         self.start_date, self.end_date, _, _ = get_dates(session, start_date, end_date)
-        super().__init__(session)
+        super().__init__(session, fund_id=fund_id, team_id=team_id, project_id=project_id)
 
         self.sub_sections = {
             k: v["sub_sections"]
@@ -47,6 +48,9 @@ class CashflowStatement(FinancialStatement):
             start_date,
             end_date,
             True,
+            fund_id=self.fund_id,
+            team_id=self.team_id,
+            project_id=self.project_id,
         )
 
         # Beginning cash balance
@@ -105,6 +109,9 @@ class CashflowStatement(FinancialStatement):
                     start_date,
                     end_date,
                     full_balance,
+                    fund_id=self.fund_id,
+                    team_id=self.team_id,
+                    project_id=self.project_id,
                 )
                 if balances["movement"] != 0:
                     self.balances[section][label[1]] = balances["movement"]

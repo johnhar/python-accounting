@@ -22,5 +22,8 @@ from .line_item import LineItem
 from .transaction import Transaction
 from .balance import Balance
 from .tax import Tax
+from .fund import Fund
+from .team import Team
+from .project import Project
 from .ledger import Ledger
 from .assignment import Assignment

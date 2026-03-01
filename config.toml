@@ -110,6 +110,9 @@ CONTRA_ENTRY.transaction_no_prefix = "CE"
 JOURNAL_ENTRY.label = "Journal Entry"
 JOURNAL_ENTRY.transaction_no_prefix = "JN"
 
+FUND_TRANSFER.label = "Fund Transfer"
+FUND_TRANSFER.transaction_no_prefix = "FT"
+
 [transactions.clearables]
 types = ["CLIENT_INVOICE", "SUPPLIER_BILL", "JOURNAL_ENTRY"]
 

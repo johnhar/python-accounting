@@ -426,3 +426,43 @@ class MixedAssignmentError(AccountingExeption):
     def __init__(self, previous: str, current: str) -> None:
         self.message = f"A Transaction that has been {previous} cannot be {current}."
         super().__init__()
+
+
+class ImmutableFieldError(AccountingExeption):
+    """A field cannot be changed after Entity creation."""
+
+    def __init__(self, field: str) -> None:
+        self.message = f"The {field} field cannot be changed after Entity creation."
+        super().__init__()
+
+
+class MissingFundError(AccountingExeption):
+    """Fund is required for all transactions when fund accounting is enabled."""
+
+    def __init__(self) -> None:
+        self.message = "Fund is required for all transactions when fund accounting is enabled."
+        super().__init__()
+
+
+class MixedFundError(AccountingExeption):
+    """All line items in a transaction must belong to the same fund."""
+
+    def __init__(self) -> None:
+        self.message = "All line items in a transaction must belong to the same fund."
+        super().__init__()
+
+
+class FundAccountingDisabledError(AccountingExeption):
+    """Fund transfers require fund accounting to be enabled on the Entity."""
+
+    def __init__(self) -> None:
+        self.message = "Fund transfers require fund accounting to be enabled on the Entity."
+        super().__init__()
+
+
+class SameFundTransferError(AccountingExeption):
+    """Source and destination funds must be different for a fund transfer."""
+
+    def __init__(self) -> None:
+        self.message = "Source and destination funds must be different for a fund transfer."
+        super().__init__()

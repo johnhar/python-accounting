@@ -63,6 +63,9 @@ class AgingSchedule:
         session,
         account_type: Account.AccountType,
         end_date: datetime = None,
+        fund_id=None,
+        team_id=None,
+        project_id=None,
     ) -> None:
         self.account_type = account_type
         self.accounts = []
@@ -72,7 +75,10 @@ class AgingSchedule:
         for account, transactions in [
             (
                 account,
-                account.statement(session, None, self.end_date, True)["transactions"],
+                account.statement(
+                    session, None, self.end_date, True,
+                    fund_id=fund_id, team_id=team_id, project_id=project_id,
+                )["transactions"],
             )
             for account in session.query(Account)
             .filter(Account.account_type == account_type)

@@ -39,8 +39,14 @@ class FinancialStatement:
     grandtotal: str = "=" * configuration.reports["result_length"]
     """(str): The underline for report grand totals."""
 
-    def __init__(self, session: Session) -> None:
+    def __init__(
+        self, session: Session,
+        fund_id=None, team_id=None, project_id=None,
+    ) -> None:
         self.session = session
+        self.fund_id = fund_id
+        self.team_id = team_id
+        self.project_id = project_id
         self.title = configuration.reports[self.config]["title"]
 
         # Financial Statement Sections
@@ -86,7 +92,8 @@ class FinancialStatement:
         for section, content in configuration.reports[self.config]["sections"].items():
             for account_type in content["account_types"]:
                 balances = Account.section_balances(
-                    self.session, [account_type], start_date, end_date, full_balance
+                    self.session, [account_type], start_date, end_date, full_balance,
+                    fund_id=self.fund_id, team_id=self.team_id, project_id=self.project_id,
                 )
                 account_type = Account.AccountType[account_type].value
                 if balances["closing"] != 0:

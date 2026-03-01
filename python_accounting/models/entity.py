@@ -11,8 +11,9 @@ Represents the person, real or artifial engaging in financial Transactions.
 """
 from typing import List
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, Boolean, ForeignKey
+from sqlalchemy import String, Boolean, ForeignKey, inspect
 from python_accounting.models import Recyclable, ReportingPeriod
+from python_accounting.exceptions import ImmutableFieldError
 
 
 # pylint: disable=too-few-public-methods
@@ -35,6 +36,12 @@ class Entity(Recyclable):
     """
     (`bool`, optional): Determines if the Entity
     can have Opening Balances withing the current Reporting Period.
+    Defaults to False.
+    """
+    fund_accounting: Mapped[bool] = mapped_column(Boolean, default=False)
+    """
+    (`bool`, optional): Determines if the Entity uses fund accounting.
+    When enabled, all transactions require a fund_id. Immutable after creation.
     Defaults to False.
     """
     year_start: Mapped[int] = mapped_column(default=1)
@@ -64,3 +71,16 @@ class Entity(Recyclable):
 
     def __repr__(self) -> str:
         return self.name
+
+    def validate(self, _) -> None:
+        """
+        Validates the Entity properties.
+
+        Raises:
+            ImmutableFieldError: If fund_accounting is changed after creation.
+
+        Returns:
+            None
+        """
+        if self.id and len(inspect(self).attrs.fund_accounting.history.deleted) > 0:
+            raise ImmutableFieldError("fund_accounting")

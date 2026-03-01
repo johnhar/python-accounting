@@ -27,6 +27,7 @@ from python_accounting.exceptions import (
     InvalidBalanceTransactionError,
     NegativeValueError,
     InvalidBalanceDateError,
+    MissingFundError,
 )
 from python_accounting.mixins import IsolatingMixin, ClearingMixin
 from python_accounting.reports import IncomeStatement
@@ -72,6 +73,12 @@ class Balance(IsolatingMixin, ClearingMixin, Recyclable):
     """(int): The id of the Account model to which the Balance belongs."""
     reporting_period_id: Mapped[int] = mapped_column(ForeignKey("reporting_period.id"))
     """(int): The id of the Reporting Period model to which the Balance belongs."""
+    fund_id: Mapped[int] = mapped_column(ForeignKey("fund.id"), nullable=True)
+    """(`int`, optional): The id of the Fund associated with the Balance."""
+    team_id: Mapped[int] = mapped_column(ForeignKey("team.id"), nullable=True)
+    """(`int`, optional): The id of the Team associated with the Balance."""
+    project_id: Mapped[int] = mapped_column(ForeignKey("project.id"), nullable=True)
+    """(`int`, optional): The id of the Project associated with the Balance."""
 
     # relationships
     currency: Mapped["Currency"] = relationship(foreign_keys=[currency_id])
@@ -82,6 +89,12 @@ class Balance(IsolatingMixin, ClearingMixin, Recyclable):
         foreign_keys=[reporting_period_id]
     )
     """(ReportingPeriod): The Reporting Period model to which the Balance belongs."""
+    fund: Mapped["Fund"] = relationship(foreign_keys=[fund_id])
+    """(`Fund`, optional): The Fund associated with the Balance."""
+    team: Mapped["Team"] = relationship(foreign_keys=[team_id])
+    """(`Team`, optional): The Team associated with the Balance."""
+    project: Mapped["Project"] = relationship(foreign_keys=[project_id])
+    """(`Project`, optional): The Project associated with the Balance."""
 
     def __repr__(self) -> str:
         return f"{self.account} {self.reporting_period}: {self.amount}"
@@ -177,3 +190,6 @@ class Balance(IsolatingMixin, ClearingMixin, Recyclable):
             and not session.entity.mid_year_balances
         ):
             raise InvalidBalanceDateError
+
+        if session.entity.fund_accounting and self.fund_id is None:
+            raise MissingFundError

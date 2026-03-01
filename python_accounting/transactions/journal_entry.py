@@ -52,12 +52,14 @@ class JournalEntry(  # pylint: disable=too-many-ancestors
 
         compound_entries = {"Debit": [], "Credit": []}
         compound_entries["Credit" if self.credited else "Debit"].append(
-            [self.account_id, self.main_account_amount]
+            [self.account_id, self.main_account_amount,
+             self.fund_id, None, None]
         )
 
         for line_item in self.line_items:
             compound_entries["Credit" if line_item.credited else "Debit"].append(
-                [line_item.account_id, line_item.amount * line_item.quantity]
+                [line_item.account_id, line_item.amount * line_item.quantity,
+                 line_item.fund_id, line_item.team_id, line_item.project_id]
             )
         return compound_entries["Debit"], compound_entries["Credit"]
 

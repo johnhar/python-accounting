@@ -17,7 +17,7 @@ from sqlalchemy import ForeignKey, Boolean, func, String
 from sqlalchemy.types import DECIMAL
 from python_accounting.mixins import IsolatingMixin
 from python_accounting.models import Recyclable
-from python_accounting.exceptions import NegativeValueError, HangingTransactionsError
+from python_accounting.exceptions import NegativeValueError, HangingTransactionsError, MissingFundError
 
 
 class LineItem(IsolatingMixin, Recyclable):
@@ -53,6 +53,12 @@ class LineItem(IsolatingMixin, Recyclable):
     """(`int`, optional): The id of the Transaction model associated with the Line Item."""
     tax_id: Mapped[int] = mapped_column(ForeignKey("tax.id"), nullable=True)
     """(`int`, optional): The id of the Tax model associated with the Line Item."""
+    fund_id: Mapped[int] = mapped_column(ForeignKey("fund.id"), nullable=True)
+    """(`int`, optional): The id of the Fund associated with the Line Item."""
+    team_id: Mapped[int] = mapped_column(ForeignKey("team.id"), nullable=True)
+    """(`int`, optional): The id of the Team associated with the Line Item."""
+    project_id: Mapped[int] = mapped_column(ForeignKey("project.id"), nullable=True)
+    """(`int`, optional): The id of the Project associated with the Line Item."""
 
     # relationships
     account: Mapped["Account"] = relationship(foreign_keys=[account_id])
@@ -61,6 +67,12 @@ class LineItem(IsolatingMixin, Recyclable):
     """(`Tax`, optional): The Tax model associated with the Line Item."""
     transaction: Mapped["Transaction"] = relationship(foreign_keys=[transaction_id])
     """(`Transaction`, optional): The Transaction model associated with the Line Item."""
+    fund: Mapped["Fund"] = relationship(foreign_keys=[fund_id])
+    """(`Fund`, optional): The Fund associated with the Line Item."""
+    team: Mapped["Team"] = relationship(foreign_keys=[team_id])
+    """(`Team`, optional): The Team associated with the Line Item."""
+    project: Mapped["Project"] = relationship(foreign_keys=[project_id])
+    """(`Project`, optional): The Project associated with the Line Item."""
     ledgers: Mapped[List["Ledger"]] = relationship(
         back_populates="line_item",
         primaryjoin="LineItem.id==Ledger.line_item_id",
@@ -87,7 +99,7 @@ class LineItem(IsolatingMixin, Recyclable):
         return f"""{self.account.name if self.account else ''}
          <{'Credit' if self.credited else 'Debit'}>: {self.amount * self.quantity}"""
 
-    def validate(self, _) -> None:
+    def validate(self, session) -> None:
         """
         Validates the Line Item properties.
 
@@ -96,6 +108,7 @@ class LineItem(IsolatingMixin, Recyclable):
 
         Raises:
             NegativeValueError: If the Line Item amount or quantity is less than 0.
+            MissingFundError: If fund accounting is enabled and fund_id is not set.
 
         Returns:
             None
@@ -106,6 +119,9 @@ class LineItem(IsolatingMixin, Recyclable):
 
         if self.quantity and self.quantity < 0:
             raise NegativeValueError(self.__class__.__name__, "quantity")
+
+        if session.entity.fund_accounting and self.fund_id is None:
+            raise MissingFundError
 
     def validate_delete(self, session) -> None:
         """

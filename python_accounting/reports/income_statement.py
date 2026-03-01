@@ -42,10 +42,11 @@ class IncomeStatement(FinancialStatement):
     """(str): The configuration section for the report."""
 
     def __init__(
-        self, session, start_date: datetime = None, end_date: datetime = None
+        self, session, start_date: datetime = None, end_date: datetime = None,
+        fund_id=None, team_id=None, project_id=None,
     ) -> None:
         self.start_date, self.end_date, _, _ = get_dates(session, start_date, end_date)
-        super().__init__(session)
+        super().__init__(session, fund_id=fund_id, team_id=team_id, project_id=project_id)
 
         self._get_sections(self.start_date, self.end_date, False)
 
@@ -91,7 +92,8 @@ class IncomeStatement(FinancialStatement):
 
     @staticmethod
     def net_profit(
-        session, start_date: datetime = None, end_date: datetime = None
+        session, start_date: datetime = None, end_date: datetime = None,
+        fund_id=None, team_id=None, project_id=None,
     ) -> Decimal:
         # pylint: disable=line-too-long
         """
@@ -114,6 +116,9 @@ class IncomeStatement(FinancialStatement):
                 start_date,
                 end_date,
                 True,
+                fund_id=fund_id,
+                team_id=team_id,
+                project_id=project_id,
             )["closing"]
             * -1
         )

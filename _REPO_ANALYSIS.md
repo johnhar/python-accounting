@@ -52,13 +52,16 @@ A `JournalEntry` with `compound=True` allows multiple debits and multiple credit
 Entity (reporting company)
   ├── Currency
   ├── ReportingPeriod (OPEN → ADJUSTING → CLOSED)
+  ├── Fund (fund accounting only)
+  ├── Team (optional dimension)
+  ├── Project (optional dimension)
   ├── Account (16 types, serial codes)
   │     ├── Category (optional grouping)
   │     └── Balance (opening balances from prior periods)
   ├── Tax
-  └── Transaction (10 types, polymorphic)
-        ├── LineItem (the "other side" of entries)
-        ├── Ledger (the actual debit/credit postings)
+  └── Transaction (11 types, polymorphic)
+        ├── LineItem (fund_id, team_id, project_id)
+        ├── Ledger (inherits dimensions from LineItem)
         └── Assignment (links payments to invoices)
 ```
 
@@ -85,7 +88,7 @@ Entity (reporting company)
 | OVERHEAD_EXPENSE | 15000–15999 | Debit |
 | OTHER_EXPENSE | 16000–16999 | Debit |
 
-### Transaction Types (10)
+### Transaction Types (11)
 
 | Type | Prefix | Main Account | Line Item Accounts | credited |
 |------|--------|-------------|-------------------|----------|
@@ -99,6 +102,7 @@ Entity (reporting company)
 | **SUPPLIER_PAYMENT** | PY | PAYABLE | BANK | False |
 | **CONTRA_ENTRY** | CE | BANK | BANK | False |
 | **JOURNAL_ENTRY** | JN | Any | Any | Either |
+| **FUND_TRANSFER** | FT | BANK | BANK | False |
 
 \* Purchasables: NON_CURRENT_ASSET, CONTRA_ASSET, INVENTORY, CURRENT_ASSET, OPERATING_EXPENSE, DIRECT_EXPENSE, OVERHEAD_EXPENSE, OTHER_EXPENSE, NON_OPERATING_REVENUE
 
@@ -248,6 +252,9 @@ python_accounting/
 │   ├── line_item.py        # Transaction line items
 │   ├── balance.py          # Opening balances from prior periods
 │   ├── assignment.py       # Links payments to invoices
+│   ├── fund.py             # Fund model (fund accounting)
+│   ├── team.py             # Team model (dimensional tagging)
+│   ├── project.py          # Project model (dimensional tagging)
 │   ├── currency.py         # Currency support
 │   ├── category.py         # Account categories
 │   ├── tax.py              # Tax rates
@@ -292,6 +299,112 @@ tests/
 ├── conftest.py             # Fixtures (engine, session, entity, currency)
 └── test_*.py               # ~20 test modules covering all models & reports
 config.toml                 # Account types, transaction types, report definitions
+```
+
+---
+
+## Fund Accounting
+
+The system supports fund accounting for non-profits and government entities. When enabled, every dollar is tagged by the fund (purpose) it belongs to.
+
+### Entity Flag
+
+The `Entity.fund_accounting` boolean controls whether fund accounting is active. It is **immutable** after creation — attempting to change it raises `ImmutableFieldError`. This prevents mode switches that would leave existing transactions in an inconsistent state.
+
+### Fund Model
+
+```
+Fund
+  ├── name (str, required, auto-title-cased)
+  ├── description (str, optional)
+  ├── fund_code (str, optional, e.g. "GEN", "BLD")
+  └── entity_id (FK → Entity, via IsolatingMixin)
+```
+
+Funds use `IsolatingMixin` and `Recyclable` like other core models. Deletion is blocked if any `Ledger` rows reference the fund (`HangingTransactionsError`).
+
+### Fund Enforcement
+
+When `entity.fund_accounting` is `True`:
+- Every `LineItem` must have a non-null `fund_id` (`MissingFundError`)
+- The `fund_id` propagates from `LineItem` to `Ledger` during posting
+- Reports can be filtered by `fund_id` for per-fund statements
+
+### FundTransfer Transaction
+
+`FundTransfer` is a transaction type that moves resources between funds. Validation requires:
+- Fund accounting must be enabled (`FundAccountingDisabledError`)
+- Source and destination funds must differ (`SameFundTransferError`)
+
+A **logical transfer** uses the same bank account on both sides (only the fund tag changes). A **physical transfer** moves money between different bank accounts.
+
+### Related Exceptions
+
+| Exception | Trigger |
+|-----------|---------|
+| `ImmutableFieldError` | Changing `fund_accounting` after entity creation |
+| `MissingFundError` | Line item without `fund_id` when fund accounting is enabled |
+| `MixedFundError` | Line items in a transaction belonging to different funds |
+| `FundAccountingDisabledError` | Creating a FundTransfer without fund accounting enabled |
+| `SameFundTransferError` | FundTransfer with identical source and destination funds |
+
+---
+
+## Dimensional Tagging (Team & Project)
+
+Teams and Projects are optional cross-cutting analytical dimensions. They are orthogonal to accounts and funds.
+
+### Team Model
+
+```
+Team
+  ├── name (str, required, auto-title-cased)
+  ├── description (str, optional)
+  └── entity_id (FK → Entity, via IsolatingMixin)
+```
+
+### Project Model
+
+```
+Project
+  ├── name (str, required, auto-title-cased)
+  ├── description (str, optional)
+  └── entity_id (FK → Entity, via IsolatingMixin)
+```
+
+### How Tagging Works
+
+1. Set `team_id` and/or `project_id` on a `LineItem` (both optional)
+2. When the transaction posts, these tags propagate to the `Ledger` entries
+3. Reports accept optional `team_id`/`project_id` parameters to filter results
+4. Omitting dimension parameters produces consolidated (unfiltered) reports
+
+### Key Properties
+
+- **Always optional** — never blocks transaction posting
+- **Entity-scoped** via `IsolatingMixin`
+- **Deletion-protected** — cannot delete a Team/Project with referenced Ledger rows
+- **Combinable** — filter reports by fund + team + project simultaneously
+
+---
+
+## Updated Entity Hierarchy
+
+```
+Entity (reporting company)
+  ├── Currency
+  ├── ReportingPeriod (OPEN → ADJUSTING → CLOSED)
+  ├── Fund (fund accounting only)
+  ├── Team (optional dimension)
+  ├── Project (optional dimension)
+  ├── Account (16 types, serial codes)
+  │     ├── Category (optional grouping)
+  │     └── Balance (opening balances from prior periods)
+  ├── Tax
+  └── Transaction (11 types, polymorphic)
+        ├── LineItem (fund_id, team_id, project_id)
+        ├── Ledger (inherits dimensions from LineItem)
+        └── Assignment (links payments to invoices)
 ```
 
 ---
